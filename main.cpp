@@ -1,6 +1,22 @@
 #include <iostream>
-#include "/Users/sofiakanukova/Downloads/eigen-3.4-2.0/Eigen/Dense"
+#include <vector>
 
+#include <QApplication>
+#include <QBoxLayout>
+#include <QDebug>
+#include <QMainWindow>
+#include <QVector>
+#include <QWidget>
+
+// include all the plotting stuff
+#include <QChart>
+#include <QtCharts>
+#include <QChartView>
+#include <QValueAxis>
+#include <QLineSeries>
+
+// placed Eigen as third-party alongside project
+#include <Eigen>
 
 
 double a31(double Ka, double l1, double l2, double J){
@@ -43,8 +59,81 @@ double j(double M, double l1, double l2){
     return(M * (pow(l1, 2) - l1 * l2 + pow(l2, 2)) / 3);
 }
 
-int main() {
-    //  Parameters definition
+
+void plotGraph(QWidget *parent, const std::vector<double>& y1, const std::vector<double>& y2, const std::vector<double>& time) {
+    if (!parent) {
+        qDebug() << "plotGraph: Provide non-null parent";
+        return;
+    }
+
+    if (!parent->layout()) {
+        qDebug() << "plotGraph: Provide parent which has layout";
+        return;
+    }
+
+    // Check that the input vectors are not empty
+    if (y1.empty()  || y2.empty()  ||  time.empty()) {
+        qDebug() << "Error: One or more input vectors are empty";
+        return;
+        }
+
+    // Check that the input vectors have the same size
+    if (y1.size() != time.size(), y2.size() != time.size(), y1.size() != y2.size()) {
+        qDebug() << "Error: The input vectors have different sizes";
+        return;
+        }
+
+    // Create a chart
+    QChart *chart = new QChart();
+
+    // Create x-axis (time)
+    QValueAxis *axisX = new QValueAxis();
+
+    // Create y-axis
+    QValueAxis *axisY = new QValueAxis();
+
+    // Set axis titles
+    axisX->setTitleText("Time");
+    axisY->setTitleText("y1");
+
+    // Add axes to the chart
+    chart->addAxis(axisX, Qt::AlignBottom);
+    chart->addAxis(axisY, Qt::AlignLeft);
+
+    // Create a line series
+    QLineSeries *series1 = new QLineSeries();
+    QLineSeries *series2 = new QLineSeries();
+
+    // Fill the series with data from vectors
+    for (size_t i = 0; i < y1.size(); ++i) {
+        series1->append(time[i], y1[i]);
+        series2->append(time[i], y2[i]);
+    }
+
+    // Add series to the chart
+    chart->addSeries(series1);
+    chart->addSeries(series2);
+
+    // Attach series to axes
+    series1->attachAxis(axisX);
+    series1->attachAxis(axisY);
+    series2->attachAxis(axisX);
+    series2->attachAxis(axisY);
+
+    // Create a chart view
+    auto view = new QChartView(parent);
+    view->setMinimumSize(600, 500);
+    view->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+
+    view->setChart(chart);
+
+    parent->layout()->addWidget(view);
+    view->show();
+}
+
+
+int main(int argc, char *argv[]) {
+    //Parameters definition
     double midrule_crossbeam_mass = 25.0;
     double load_mass = 10.0;
     double crossbeam_length = 0.8;
@@ -60,11 +149,11 @@ int main() {
     double resistance_y1 = 8.4;
     double resistance_y2 = 8.4;
 
-    // Example of different l1 + l2 = L
-    double l1 = 0.2;
-    double l2 = 0.6;
+    //Example of different l1 + l2 = L
+    double l1 = 0.3;
+    double l2 = 0.5;
 
-    // Exact parameters definition for current problem
+    //Exact parameters definition for current problem
     double J = j(midrule_crossbeam_mass, l1, l2);
     double A31 = a31(stiffness, l1, l2, J);
     double A32 = a32(stiffness, l1, l2, J);
@@ -114,18 +203,23 @@ int main() {
 
     Eigen::Matrix<double, 2, 1> u{
             {1},
-            {2}
+            {1}
     };
 
 
-    double dt = 0.01;
-    double T = 0.063;
+    double dt = 0.0001;
+    double T = 1.0;
 
     int order = 4;
     Eigen::Matrix<double, 6, 1> x_prev[order];
     for (int i = 0; i < order; ++i) {
         x_prev[i] = x;
     }
+
+    std::vector<double> y1(T / dt, 0);
+    std::vector<double> y2(T / dt, 0);
+    std::vector<double> time(T / dt, 0);
+    int cnt = 0;
 
     //Linear multistep method of Adams-Bashforth-Moulton
     for (double t = 0; t < T; t += dt) {
@@ -145,9 +239,27 @@ int main() {
 
         Eigen::Matrix<double, 2, 1> y = C * x;
 
-        std::cout << "Time: " << t << std::endl;
-        std::cout << "State x: " << std::endl << x << std::endl;
-        std::cout << "Output y: " << std::endl << y << std::endl;
+        y1[cnt] = y[0];
+        y2[cnt] = y[1];
+        time[cnt] = t;
+
+        cnt+=1;
     }
-    return 0;
+
+    QApplication app(argc, argv);
+
+    QMainWindow mainWindow;
+    mainWindow.setMinimumSize(800, 600);
+
+    auto centralWidget = new QWidget(&mainWindow);
+    mainWindow.setCentralWidget(centralWidget);
+
+    auto layout = new QBoxLayout(QBoxLayout::TopToBottom, mainWindow.centralWidget());
+    mainWindow.centralWidget()->setLayout(layout);
+
+    mainWindow.show();
+
+    plotGraph(mainWindow.centralWidget(), y1, y2,  time);
+
+    return app.exec();
 }
